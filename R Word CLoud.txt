@@ -1,0 +1,139 @@
+Guess whose twitter handle gives this word cloud? Enough hints present in there. You are right, that is Andrew Ng tweeting about his new Deep Learning course on Coursera! It’s always fun to see data in action; isn’t it? Let’s try and create a similar wordcloud for three world leaders, viz. American President Donald Trump, Indian Prime Minister Narendra Modi, and Russian President Vladimir Putin.
+
+
+A wordcloud is a data visualisation technique in which the size of each word indicates its frequency or importance in the associated text (i.e., the more times a word appears in the corpus, the bigger the word)
+Since you are interested in creating a wordcloud from twitter handles using R, I will safely assume you have both, a Twitter account to your name, and RStudio installed on your machine. If not, now is the time to do it
+You must also have a Twitter Developer Account set up as a medium to extract the tweets. 
+Let’s get started. Following are the steps we will be taking to get this task done:
+Get Twitter data using handles (2 lines of code!)
+Prepare it for visualisation (Real fun part)
+And finally, create a word cloud (Single line of code!)
+Extract Tweets
+Let us load necessary libraries and establish a connection with Twitter
+#Getting tweets from twitter
+library(twitteR)
+#Twitter-R Authentication
+library(ROAuth)
+#Text processing
+library(stringr)
+#Text mining 
+library(tm)
+#Wordcloud creation
+library(wordcloud)
+#Connect to twitter API using the saved credentials
+load("twitter authentication.Rdata")
+setup_twitter_oauth(credentials$consumerKey, credentials$consumerSecret, credentials$oauthKey, credentials$oauthSecret)
+Let’s go collect some data now. A couple things to note here -
+One can only get access to data from users who ‘follow’ the Twitter account associated with the API. Or, from the accounts that are public (vs. private)
+Twitter API limits the number of tweets a user can get from a particular timeline to be 3200, including RTs even if it is set to FALSE. There are, although, a  few tools available that lets you bypass this limit. We will stick to the limits in this post
+Twitter API also has a rate limit  on how many tweets can be collected at once. If you try to collect too many of them at once, it may fail or return partial results. The best way to work around this is by introducing lag between API calls so that you don’t have to be around when the code runs
+Get twitter handles of the personalities you want to look up. Make sure these are real twitter accounts or you’ll get an error.
+screenName <- c(‘realDonaldTrump’, ‘PutinRF_Eng’, ‘narendramodi’)
+ 
+Collect information about these handles using twitteR.
+checkHandles <- lookupUsers(screenName)
+Get user data for each of the handles and create a data frame for easy access. Check for number of tweets and private accounts using this. Remove private accounts, if any.
+UserData <- lapply(checkHandles, function(x) getUser(x))
+UserData <- twListToDF(UserData)
+table(UserData$name, UserData$statusesCount)
+#Check tweet count
+table(UserData$name, UserData$protected)
+#Check Private Accounts
+usernames <- subset(UserData, protected == FALSE)
+#Public Accounts
+usernames <- as.list(usernames$screenName)
+Next we get the list of tweets from the user timelines, covert them to a dataframe and wait for 5 minutes before making another API call. Combine all the dataframes into one to pre-process the tweets. Note, we will only be getting 3200 most recent tweets for these handles. Trump and Modi have tweeted a lot more than that.
+x <- userTimeline(‘realDonaldTrump’,n=3200,includeRts = FALSE)
+#Convert tweets list to dataframe
+TrumpData <- twListToDF(x)
+#Wait 5 minutes 
+Sys.sleep(300) 
+x <- userTimeline(‘PutinRF_Eng’,n=3200,includeRts = FALSE)
+PutinData <- twListToDF(x)
+Sys.sleep(300)
+x <- userTimeline(‘narendramodi’,n=3200,includeRts = TRUE)
+ModiData <- twListToDF(x)
+Trump.df <- data.frame(TrumpData)
+Putin.df <- data.frame(PutinData)
+Modi.df <- data.frame(ModiData)
+#Now create a dataframe that combines all of the collected tweets
+tweets <- data.frame()
+tweets <- Trump.df
+tweets <- rbind(tweets,Putin.df)
+tweets <- rbind(tweets,Modi.df)
+Pre-Process Tweets
+Now that we have all the relevant tweets in one place, it is time to pre-process them. What I mean here is, let’s remove unwanted characters, symbols and words. You do not want graphic characters, articles, symbols, and numbers to appear in the word cloud. You can skip any of these pre-processing steps based on your need.
+#Convert tweets to ASCII to avoid reading strange characters
+iconv(tweets$text, from=”UTF-8", to=”ASCII”, sub=””)
+#Clean text by removing graphic characters
+tweets$text=str_replace_all(tweets$text,"[^[:graph:]]", " ") 
+#Remove Junk Values and replacement words like fffd which appear because of encoding differences            
+tweets$text <- gsub("[^[:alnum:]///' ]", "", tweets$text) 
+#Convert all text to lower case            
+tweets$text <- tolower(tweets$text)
+#Remove retweet keyword            
+tweets$text <- gsub("rt", "", tweets$text)
+#Remove Punctuations            
+tweets$text <- gsub("[[:punct:]]", "", tweets$text)
+#Remove links            
+tweets$text <- gsub("http\\w+", "", tweets$text)
+#Remove tabs            
+tweets$text <- gsub("[ |\t]{2,}", "", tweets$text)
+#Remove blankspaces at begining            
+tweets$text <- gsub("^ ", "", tweets$text)
+#Remove blankspaces at the end            
+tweets$text <- gsub(" $", "", tweets$text)
+#Remove usernames 
+tweets$text <- gsub("@\\w+", "", tweets$text)
+Once we have pre-processed tweets, let us now create a corpus for each handle and remove stopwords like ‘my’, ‘do’, ‘today’ etc.
+#After preprocessing the data, subset for tweets for each handle
+Trump <- subset(tweets, screenName==“realDonaldTrump”, select= text)
+Putin <- subset(tweets, screenName== “PutinRF_Eng”, select= text)
+Modi <- subset(tweets, screenName== “narendramodi”, select= text)
+#Create corpus of individual twitter handles 
+Trump <- Corpus(VectorSource(Trump))
+Putin <- Corpus(VectorSource(Putin))
+Modi <- Corpus(VectorSource(Modi))
+#Remove English Stopwords from the tweets
+Trump <- tm_map(Trump, removeWords, stopwords(“en”))
+Putin <- tm_map(Putin, removeWords, stopwords(“en”))
+Modi <- tm_map(Modi, removeWords, stopwords(“en”))
+Create WordCloud
+If you survived through all these steps to reach here, you deserve a poetic treat! Here goes..
+ 
+Now that we have everything we need,
+Let’s feed upon our greed 
+Make a cloud of what they tweet,
+Like in the beginning we agreed
+ 
+A function wordcloud() lets you define parameters for wordcloud creation viz. input corpus, minimum frequency of the words to be displayed, size and shape of the cloud, color and order of the words, maximum words displayed, etc. Tweak these and have a little play.
+wordcloud(Trump,min.freq = 3, scale=c(6,0.5),colors=brewer.pal(8, “Dark2”),random.color= FALSE, random.order = FALSE, max.words = 110)
+wordcloud(Putin,min.freq = 4, scale=c(7,0.8),colors=brewer.pal(8, “Dark2”),random.color= FALSE, random.order = FALSE, max.words = 100)
+wordcloud(Modi,min.freq = 3, scale=c(6,0.5),colors=brewer.pal(8, “Dark2”),random.color= FALSE, random.order = FALSE, max.words = 110)
+Syntax and Explanation (source):
+wordcloud(words, freq, min.freq, scale, max.words, random.order, random.color, rot.per,colors, ordered.colors, use.r.layout...)
+words: Words to be plotted in the cloud
+freq: Frequency of these words in the text
+min.freq: Words with frequency below min.freq will not be plotted 
+scale: A vector of length 2 indicating the range of the size of the words
+max.words: Maximum number of words to be plotted; least frequent terms dropped 
+random.order: Plot words in random order. If false, they will be plotted in decreasing frequency 
+random.color: Choose colors randomly from the colors. If false, the color is chosen based on the frequency 
+rot.per: Proportion words with 90 degree rotation 
+colors: Color words from least to most frequent 
+ordered.colors: If true, then colors are assigned to words in order 
+use.r.layout: If false, then c++ code is used for collision detection, otherwise R is used
+...:  Additional parameters to be passed to text (and strheight,strwidth)
+You can add more information to your word cloud based on the order and color you choose. You can specify non-random color assignment (random.color = FALSE) which will make it based on frequency then choose a value of colors using a palette (brewer.pal from RColorBrewer  package) that goes in the order you prefer.
+You can also have words color-coded based on their sentiments, say for example positive and negative emotions. This can be accomplished by having an additional column in the database that define this property and then using it to define color as follows –
+wordcloud(df$words,df$freq, min.freq = 3, scale=c(6,0.5), random.color= FALSE, ordered.colors=TRUE, colors=brewer.pal(8, “Dark2”)[factor(df$sentiment)], random.order = FALSE, max.words = 110)
+After you have created the cloud, you might see some of the words or numbers that are irrelevant and give no additional information. In such cases, you need to tweak your cloud a bit again. For Example, when I created these clouds, I saw the words ‘amp’ and ‘will’ as the most frequent words in Trump’s and Modi’s cloud. I used the following code lines and removed them. Below are the wordclouds I got after making these changes.
+#Remove numbers if necessary
+#Putin <- tm_map(Putin, removeNumbers)
+#Remove specific words if needed
+#Trump <- tm_map(Trump, removeWords, c(‘amp’,’will’))
+#Modi <- tm_map(Modi, removeWords, c(‘amp’,’will’))
+
+
+Closing Note
+Apart from getting a sense of what is being tweeted about the most by a particular Twitter Handle, we can use word clouds to do a lot of other cool stuff. One such example is sentiment analysis for a product. Use hashtag to get all the tweets about the product, process them to get meaningful words and build a cloud, bang! You know your product is doing well if the most frequent words are positive.
